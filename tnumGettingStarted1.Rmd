@@ -1,0 +1,187 @@
+---
+title: "Getting Started wth **tnum** for R"
+author: "[True Engineering Technology, LLC](http://truenum.com) Lincoln, MA" 
+output: html_notebook
+---
+
+------------------------------------------------------------------------
+
+### 
+
+***tnum*** **is a data management companion for R.** In using R, we draw from a variety of data sources, reading them into data frames, vectors or lists for exploration and analytic processing. This in turn produces more data, from summary statistics and models to graphs and tables that enrich the original data, or derive new information from it. Doing this results in many different data structures, labeled with informal row and column names, and many files persisting source data and results on the user's hard-drive. Working and collaborating with these requires keeping track of them, their meaning, structure and file versions.
+
+**Truenumbers**, is a central cloud repository for creating, tagging and querying persistent data as a collection of facts using a structured pseudo-natural language to describe them. We call these facts *truenumbers*, *tnums* or *TNs*. Using *tnum* provides a convenient and scalable way to manage data and results centrally, as a growing body of intelligible knowledge, without resorting to relational databases (which are usually far from intelligible).
+
+### Getting up and running
+
+After installing package *tnum*, it's necessary to authenticate with the *tnum* server:
+
+```{r echo=TRUE}
+library(tnum)
+tnum.loadLibs()
+tnum.authorize(ip="mssp.truenum.com:8080",creds = "demo@mssp.edu:salmon")
+```
+
+*authorize* takes two arguments: **ip** representing the URL or IP address of the *tnum* server endpoint. **creds** is a string containing your username and password, separated by a colon. The function returns a list of available numberspaces on the server, and reports one of them as the currently active numberspace. A *numberspace* is a separate repository for truenumber data.
+
+### Truenumber facts and phrases
+
+A truenumber fact is equivalent to a sentence of the form **\<subject\> has \<property\> = \<value\>**, or **\<property\> of \<subject\> is \<value\>** for example:
+
+<br>
+
+<center>**number of fulltime undergraduate students of colorado state university is 15646**</center>
+
+<br> and <br>
+
+<center>**montclair state university has graduation rate = 58%**</center>
+
+<br> The subject **fulltime undergraduate students of montclair state university** is equivalent to a path **university:state:montclair/students:undergraduate:fulltime** where the separator **:** denotes an *adjective* relationship, and **/** denotes a possesive.
+
+Let's make TN JSON objects for the above examples:
+
+```{r}
+tn1 <- tnum.postStatement(
+  stmt = "number of fulltime undergraduate students of colorado state university is 15646",
+  notes = "Our first truenumber"
+)
+
+tn2 <- tnum.postStatement( stmt = "montclair state university has graduation rate = 58%", notes = "Our second truenumber")
+```
+
+Posting returns the created truenumber, as a json structure. (We use the jsonlite package for representing json in R structures). The TN is quite a rich structure, we see the field names below, and some of them are nested having structure as well.
+
+```{r echo=TRUE}
+names(tn1)
+```
+
+### Looking at the json TN
+
+We won't detail what all these elements are, but will describe some that you will use a lot. The \$subject and \$property are the parts of the truenumber statement encoded as phrase paths. The \$wrapper is the original statement given to create the TN.
+
+```{r echo=TRUE}
+tn1$subject
+tn1$property
+tn1$wrapper
+
+```
+
+Every TN has a unique identifier (GUID) given in element \$id. This id can be used as an argument to other TNUM functions. The \$date, \$author and \$server fields tell us who created the TN, the server address where it lives, and date/time it was posted in UTC.
+
+```{r echo=TRUE}
+c(tn1$id,tn1$author,tn1$server,tn1$date)
+```
+
+To carry more than one TN around, we can of course put them in a list, but we also provide a function to convert that list into a jsonlite json array structure. Here, we do that and then display it in two parts being 16 fields wide.
+
+```{r echo=TRUE}
+df <- tnum.jsonArray(list(tn1,tn2))
+
+kable(df[,1:7])
+```
+
+```{r echo=TRUE}
+kable(df[,8:length(df)])
+
+```
+
+*NOTE* that the second part generates warnings because two of the elements \$value and \$si_value are nested json structures. We can flatten the strucure using jsonlite::flatten()
+
+```{r echo=TRUE}
+names(jsonlite::flatten(df))
+```
+
+which we can see, lifts the nested elements given them names using dot notation, like #value.quant#
+
+### TN value structures
+
+What are these value structures? Truenumber values carry the details intrinsic to measures, which are normally implicit (or forgotten) when real-world information is represented as just a numerical value for computation. The \$value structure retains those details as specified in the original TN. The \$si_value structure has the same information converted to canonical form. The prefix "si" refers to the metric unit system [Systeme Internationale](https://www.nist.gov/pml/weights-and-measures/metric-si/si-units) standard in science and engineering, but Truenumbers uses canonical forms not necessarily part of that system. For example, a TN value of 58% will have dimensionless si_value 0.58.
+
+#### Value types and tagging
+
+Not all TN values are numbers. They may also be quoted strings (we call them TsLiteral) or phrase paths like \$subject and \$property are (we call them TsSRD for "structured resource descriptor"). Numerical values are of type TsNumber. We can see the type in element \$value_type. TsNumber is the most complex type, let's make one with complex units of measure. While we're at it, we can add tags to it. A tag is either a phrase path, or a phrase path and comment. Below, we add two tags, the second having a comment.
+
+```{r echo=TRUE}
+tn3 <- tnum.postStatement("the hudson river has an average flow rate = 21.4 thousand feet^3/second", 
+                          tags = list("location:NY:Troy",c("demonstration","just for demonstrating TNUM")))
+
+tnum.getTagsOfTn(tn3$id)
+```
+
+We can remove one of the tags we added
+
+```{r echo=TRUE}
+tnum.removeTag(tn3$id, "demonstration")
+
+tnum.getTagsOfTn(tn3$id) #see if it's really gone
+```
+
+### Querying the numberspace
+
+We can retrieve sets of TNs from the numberspace with the **tnum.query()** function. For example:
+
+```{r echo=TRUE}
+result <- tnum.query("subj:university#")
+
+kable(result)
+```
+
+This was simple one-term query, using the term prefix **subj:** to query by subject. The term itself will match the path form of the TN subjects. For subject **fulltime undergraduate students of colorado state university** the path is **university:state:colorado/students:undergraduate:fulltime**. Our query term used the path wildcard **\#** which will match any (or no) path following **university**. The \_\_\*\_\_ character can be used in the usual way as a character wildcard. So **pigeon\*** would match both **pigeonhole** and **pigeon:carrier**, but **pigeon#** would match only **pigeon:carrier**.
+
+#### Term prefixes
+
+This table covers the types of terms allowed in a query. Multiple terms must be separated by **and** or **or** boolean operators. These can be preceded by negation **not**, and can be grouped using parens.
+
+| prefix      | term syntax          | effect                        |
+|-------------|----------------------|-------------------------------|
+| subj:       | path,#,\*            | matches subject               |
+| prop:       | path,#,\*            | matches property              |
+| (no prefix) | path,#,\*            | matches tag                   |
+| numval:     | \> 2.5, \< 2.5, etc. | matches si numerical value    |
+| stringval:  | regular expression   | matches string or path values |
+
+Example query string: **"(prop:density and numval:\>3) or material:density:high"**.
+
+This will return TNs expressing a numerical density greater than 3 (the density of stone) or anything tagged as a high density material.
+
+### Deleting truenumbers
+
+The **tnum.deleteByQuery()** function takes a query string as argument, but instead of retreiving matching TNs, **it deletes them**. Be very careful when using this function, making sure that your query is specific enough to delete only what you wish to.
+
+### TNUM Graphics
+
+THe package has 2 graphics functions, here are examples of use, we will provide more detail on the parameters soon.
+
+We can graph path lists
+
+```{r echo=TRUE}
+nums <- tnum.query("subj:university#")
+
+tnum.graphPathList(nums$subject)
+```
+
+and sets of TNs
+
+```{r echo=TRUE}
+tnum.graphTnumList(nums, tagpattern = ".*")
+```
+
+### Other useful functions
+
+#### Make a TN statement from constituent parts.
+
+**tnum.postStatement()** takes a sentence as input. But if we want to generate and post statements programatically, it's cumbersome to have to build sentences with string manipulation. So we provide the function **tnum.buildStatement(subject, property, value, error, unit)** which returns a statement suitable for posting, or for display.
+
+```{r echo=TRUE}
+tnum.buildStatement("this fine subject phrase", "count:word", 4)
+```
+
+NOTE that statements can have phrases in natural-language-like form, or as phrase paths.
+
+#### Getting phrase lists from the numberspace
+
+Besides querying for TNs, we often want to see what subject, property or tag phrases exist in the numberspace. The functions **tnum.getAllSubjects()**, **tnum.getAllProperties()** and \*\*tnum.getAllTags()\* return lists of unique phrases found in the numberspace. For example:
+
+```{r echo=TRUE}
+tnum.getAllTags()
+```

@@ -114,9 +114,9 @@ strawb %<>% separate(col=`Data Item`,
 EDA
 ```{r}
 # unique(strawb$type)
-# chem <- strawb%>%filter(Domain != 'ORGANIC STATUS')
+chem <- strawb%>%filter(Domain != 'ORGANIC STATUS')
 
-nonorgan <- filter(strawb, Domain != 'ORGANIC STATUS')
-non_organ_sales <- grep('sales', chem$type)
+# nonorgan <- filter(strawb, Domain != 'ORGANIC STATUS')
+non_organ_sales <- chem[grep('sales', chem$type),]
 ```
 

@@ -1,8 +1,8 @@
 ---
 title: "MA615 strawberry EDA"
-author: "Jing Xu"
+author: "Group 8"
 date: "11/09/2022"
-output: html
+output: pdf
 ---
 
 ```{r setup, include=FALSE}
@@ -108,15 +108,308 @@ strawb %<>% separate(col=`Data Item`,
                     into = c("Strawberries", "type", "items", "units"),
                     sep = ",",
                     fill = "right")
+
+temp1 <- strawb %>% select(Strawberries) %>% 
+  distinct()
+
+pr_rec <- grep("STRAWBERRIES - PRICE RECEIVED", 
+                  strawb$Strawberries, 
+                  ignore.case = T)
+
+## looks like it this might be a good time to split this analysis 
+## into oranic and non organic -- and commercial vs chemicals in each.
+
+## some data details
+## NOP is certified organic
+## see https://bityl.co/FOWS
+
+## Look at the HELP for the NASS selector interface
+## https://quickstats.nass.usda.gov/
+
+## let's track down the organic entries
+
+type_organic <- grep("organic", 
+               strawb$type, 
+               ignore.case = T)
+
+items_organic <- grep("organic", 
+                      strawb$items, 
+                      ignore.case = T)  ## nothing here
+
+Domain_organic <- grep("organic", 
+                      strawb$Domain, 
+                      ignore.case = T)
+
+
+Domain_Category_organic <- grep("organic", 
+                       strawb$`Domain Category`, 
+                       ignore.case = T)
+
+## OK.  So let's create a strawb_organic tibble
+## All three are the same
+
+same <- (intersect(type_organic, Domain_organic)==
+         intersect(type_organic, Domain_organic))
+length(same)==length(type_organic)
+
+
+org_rows <- intersect(type_organic, Domain_organic)
+
+strawb_organic <- strawb %>% slice(org_rows, preserve = FALSE)
+
+strawb_non_organic <- strawb %>% filter(!row_number() %in% org_rows)
+
+## ok strawb has been split
+## Doesn't look like we are going to get chemical data
+## split by organic v non_organic
+## so We will need to count on 
+## https://bityl.co/FOcF
+## https://bityl.co/FOcW
+
+## now separate the chemical data
+
+temp1 <- strawb_non_organic %>% select(type) %>% 
+  distinct()
+
+## the chemical data in the column "type" 
+## is in the rows where type = BEARING - Applications
+
+chem_rows <- grep("BEARING - APPLICATIONS", 
+                       strawb_non_organic$type, 
+                       ignore.case = T)
+## of the 2172 rows in strawb_non_organic 2112 contain
+## chemical data
+
+## the column "Domain" also contains indications of rows 
+## 
+
+chem_rows_1 <- grep("chemical", 
+                  strawb_non_organic$Domain, 
+                  ignore.case = T)
+
+## there are less chem rows in the Domain column
+## than in the type column
+
+ins <- intersect(chem_rows, chem_rows_1)
+
+## the cardinality of the intersection equals the cardinality
+## of chem_rows_1.  So, chem_rows calls all of the chem rows 
+## we have found so far.
+
+## Finally, we examine the `Domain Category`column.
+
+chem_rows_2 <- grep("chemical", 
+                    strawb_non_organic$`Domain Category`, 
+                    ignore.case = T)
+
+ins_2 <- intersect(chem_rows, chem_rows_2)
+
+## again, all of the row numbers in chem_rows_2 are in 
+## chem_rows
+
+
+## now sort out these tibbles just like we did strawb
+## Now, create a chem tibble
+
+
+strawb_chem <- strawb_non_organic %>% slice(chem_rows, preserve = FALSE)
+
+## now clean up the workspace before tackling the three tibbles just created.
+
+rm(x, T, drop_cols, temp1, r_thiram, r_thiram_1,
+   df_carbendazim, df_Bifenthrin, df_methyl_bromide, 
+   df_1_3_dichloropropene, df_chloropicrin, df_Telone,
+   pr_rec, type_organic, items_organic, Domain_organic,
+   Domain_Category_organic, same, org_rows, chem_rows,
+   chem_rows_1, chem_rows_2, ins, ins_2, cnames, i)
+
+
+  before_cols = colnames(strawb_chem)
+  T = NULL
+  x = length(before_cols)
+
+   for(i in 1:x){
+    b <- length(unlist(strawb_chem[,i] %>% unique()) )
+    T <- c(T,b)
+   }
+    
+  drop_cols <- before_cols[which(T == 1)]
+  strawb_chem %<>% select(!all_of(drop_cols))
+  after_cols = colnames(strawb_chem)
+
+## drop_cols is labeling information
+  
+  temp1 <- strawb_chem %>% select(units) %>% distinct()
+  ## in units rows are either NA or AVG
+  
+## separate Domain Category at :
+  
+  strawb_chem %<>% separate(col=`Domain Category`, 
+                                    into = c("dc1", "chem_name"),
+                                    sep = ":", 
+                                    fill = "right")
+  
+temp1 <- strawb_chem %>% select(chem_name) %>% unique()
+length(unlist(temp1))
+
+## first clean it up
+
+aa  <- grep("measured in", 
+                    strawb_chem$items, 
+                    ignore.case = T)
+length(aa)
+
+## so "item" is really units
+
+## are Domain and dc1 the same thing?
+
+sum(strawb_chem$Domain == strawb_chem$dc1) == dim(strawb_chem)[1]
+
+## yes, they are. let's work with dc1. Also, drop State ANSI
+
+strawb_chem %<>% select(Year, State, items, units, dc1, chem_name, Value)
+
+## now you can see that this tibble needs to be wider.  
+## clean up the entries before using pivot_wider
+
+## items should only contain unit names
+## rename units to category
+
+strawb_chem %<>% rename(category = units)
+
+## remove "MEASURED IN " 
+
+strawb_chem$items <- str_remove_all(strawb_chem$items, "MEASURED IN ")
+
+## rename items to units
+strawb_chem %<>% rename(units = items)
+
+## Do all the dc1 entries begen with "Chemical"?
+
+bb  <- grep("CHEMICAL, ", 
+            strawb_chem$dc1, 
+            ignore.case = T)
+length(bb)
+chem <- 1:2112
+
+non_chem_rows <- setdiff(chem, bb)
+length(non_chem_rows)
+
+## on let's look at these rows in a tibble
+
+temp1 <- strawb_chem %>% slice(non_chem_rows)
+
+### !! fertilizers  
+
+## keep them -- probably won't use them as a lone tibble
+
+fertilizers <- temp1
+
+## cleanup
+rm(temp1, temps, temp3, aa, bb)
+
+## now remove "CHEMICAL, " from the entries in the dc1
+## and rename the column chem_types
+
+
+strawb_chem$dc1 <- str_remove_all(strawb_chem$dc1, "CHEMICAL, ")
+
+strawb_chem$dc1 %>% unique()
+
+strawb_chem %<>% rename(chem_types = dc1)
+
+
+## Now let's get the units and categories sorted out
+## we can see that the chemicals appear many times each
+## to investigate, pick one
+
+bb  <- grep("BIFENTHRIN", 
+            strawb_chem$chem_name, 
+            ignore.case = T)
+
+bifen <- strawb_chem %>% slice(bb)
+
+## now look at the befen tibble you just made
+
+## now fix the chem_name column
+
+## remove the parens
+
+strawb_chem$chem_name <- str_remove_all(strawb_chem$chem_name, "\\(")
+
+strawb_chem$chem_name <- str_remove_all(strawb_chem$chem_name, "\\)")
+
+## separate chem_name and chem_code
+
+strawb_chem %<>% separate(col = chem_name,
+                          into = c("chem_name","chem_code"),
+                          sep = "=",
+                          fill = "right"
+                            ) 
+
+
+## now fill in a label fot NA in the category column
+
+## first check that "lb" in the units column corresponds 
+## to NA in the category column
+
+
+aa <- which(strawb_chem$units == " LB")
+
+bb <- which(is.na(strawb_chem$category))
+
+sum(aa==bb)==length(aa)
 ```
 
 
-EDA
+#EDA non-organ
 ```{r}
-# unique(strawb$type)
-chem <- strawb%>%filter(Domain != 'ORGANIC STATUS')
+non_organ_sales <- strawb_non_organic[grep("MEASURED", strawb_non_organic$type),]
 
+
+# create a dataset
+year <- non_organ_sales$Year
+state <- non_organ_sales$State
+value <- non_organ_sales$Value
+plot_data <- data.frame(year,state,value)
+ 
+# Grouped
+ggplot(plot_data, aes(fill=year, y=reorder(value, year), x=state)) + 
+    geom_bar(position="dodge", stat="identity") +
+    ggtitle("Non-Organ Strawberry market price ($/CWT)") +
+    ylab('value')
+
+
+
+# 
+# unique(strawb$type)
+# norg <- strawb%>%filter(Domain != 'ORGANIC STATUS')
+# 
 # nonorgan <- filter(strawb, Domain != 'ORGANIC STATUS')
-non_organ_sales <- chem[grep('sales', chem$type),]
+# non_organ_sales <- norg[grep('sales', norg$type),]
+```
+#EDA fertilizer usage
+```{r}
+# create a dataset for average
+fert_avg <- fertilizers[grep('YEAR', fertilizers$units),]
+year <- as.factor(fert_avg$Year)
+state <- fert_avg$State
+value <- as.integer(fert_avg$Value)
+name <- fert_avg$chem_name
+plot_data_fert <- data.frame(year,state,value, name)
+# Grouped
+
+  
+for (i in 1:length(unique(name))){
+  name_i <- unique(name)[i]
+  df_f <- plot_data_fert %>% filter(plot_data_fert$name == name_i)
+
+  out <- ggplot(df_f, aes(fill=year, y=value, x=state)) + 
+    geom_bar(position="dodge", stat="identity") +
+    ggtitle(paste("fertlizer usage", name_i, " (LB / ACRE / YEAR)")) +
+    ylab('value')
+    print(out)
+
+}
 ```
 

@@ -2,7 +2,7 @@
 title: "MA615 strawberry EDA"
 author: "Group 8"
 date: "11/09/2022"
-output: pdf
+output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
@@ -379,7 +379,7 @@ ggplot(plot_data, aes(fill=year, y=reorder(value, year), x=state)) +
     ggtitle("Non-Organ Strawberry market price ($/CWT)") +
     ylab('value')
 
-
+#from the graph, we can see that the unit price for non-organ strawberry is growing rapidly over the years, no matter the states.
 
 # 
 # unique(strawb$type)
@@ -398,18 +398,16 @@ value <- as.integer(fert_avg$Value)
 name <- fert_avg$chem_name
 plot_data_fert <- data.frame(year,state,value, name)
 # Grouped
-
-  
-for (i in 1:length(unique(name))){
-  name_i <- unique(name)[i]
-  df_f <- plot_data_fert %>% filter(plot_data_fert$name == name_i)
+for (i in unique(name)){
+  df_f <- plot_data_fert %>% filter(plot_data_fert$name == i)
 
   out <- ggplot(df_f, aes(fill=year, y=value, x=state)) + 
     geom_bar(position="dodge", stat="identity") +
-    ggtitle(paste("fertlizer usage", name_i, " (LB / ACRE / YEAR)")) +
+    ggtitle(paste("fertlizer usage", i, " (LB / ACRE / YEAR)")) +
     ylab('value')
     print(out)
-
 }
+
+#The fertilizer usage on strawberry experienced a substantial decreasing in California, while it increased slightly in Florida')
 ```
 

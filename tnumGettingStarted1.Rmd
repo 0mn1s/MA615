@@ -44,6 +44,7 @@ ch15 <- tnum.query("subj:Time_Machine:Chapter:15:*")
 ch17 <- tnum.query("subj:Time_Machine:Chapter:17:*")
 weena <- data.frame(tnum.query("stringval:Weena"))
 weena <- weena%>% select(, subject, value)
+graph_weena <- tnum.graphTnumList(weena) |> print()
 weena_tidy <- separate(weena,
   subject,
   c('book', 'ch', 'chapter', 'sen', 'sentence'),
@@ -64,7 +65,15 @@ for(i in 1:length(unique(weena_tidy$chapter))){
   print(paste(weena_tidy$value[weena_tidy$chapter==cpt]))
 }
 
+
 ```
+
+
+
+
+
+
+
 ```{r}
 example<-data.frame(cbind(col1=1:10, col2=21:30, col3=41:50))
     call.fun<-function(t){

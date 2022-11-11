@@ -1,0 +1,272 @@
+---
+title: "Mapping with tidycensus and tmap"
+author: "Aidan O'Hara"
+date: "2022-11-09"
+output:
+  slidy_presentation: default
+  beamer_presentation: default
+  ioslides_presentation: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r include = F}
+### Mapping with tmap, from Analyzing US Census Data: Methods, Maps, and Models in R
+library(tmap)
+library(tmaptools)
+library(tidycensus)
+library(tidyverse)
+library(sf)
+library(rmapshaper)
+```
+
+## tidycensus: get_acs function or (\_decennial)
+
+```{r, echo = TRUE, eval = FALSE}
+get_acs(
+  geography, #geography level
+  variables = NULL, #specific variables
+  table = NULL, #"group" variables and tables
+  year = 2020,
+  state = NULL, # state, FIPS or abbreviation
+  county = NULL, # a vector of counties 
+  # If you want counties from multiple states,
+  # state = "multiple"
+  geometry = FALSE,# to include shape files
+  shift_geo = FALSE, # For Alaska and Hawaii
+  summary_var = NULL, # Variable for comparisons
+  key = NULL, # YOUR CENSUS KEY
+  moe_level = 90, # Margin of Error
+  survey = "acs5", # acs1, acs3, or acs5
+  show_call = FALSE, # For debug
+)
+```
+
+## Getting your own Census API Key
+
+-   Go to: <https://api.census.gov/data/key_signup.html> or search "Census API Key"
+-   Request your key.
+-   Activate your key with the verification email.
+
+`census_api_key()` should install your census key in your R environment file, the retrieval functions will access it from there. if that fails, without an easy fix: Option 1 Create a local variable for reference, just be mindful about sharing your key publicly Option 2 Use scc to access Rstudio and add it to your environment there.
+
+```{r, echo = TRUE, eval=FALSE}
+census_api_key("7d5f04e5d602e5449723b78374372ef9022508a6", 
+               overwrite = FALSE, 
+               install = TRUE)
+# Or, at worst.
+myKey <- "7d5f04e5d602e5449723b78374372ef9022508a6"
+
+```
+
+## How do you find the data?
+
+-   Read the survey or census "Available APIs" page:
+
+<https://www.census.gov/data/developers/data-sets.html>
+
+-   Use the advanced data search at
+
+<https://data.census.gov/cedsci/advanced>
+
+-   Find specific tables or variables
+-   Sort by survey
+-   Detailed tables are most specific but other sets often contain useful topic summaries and aggregations
+-   Using the Topics filter helps narrow down the scope of your search
+
+## Tables vs Variables
+
+-   Table B17024 has 131 individual variables about "AGE BY RATIO OF INCOME TO POVERTY LEVEL IN THE PAST 12 MONTHS"
+-   Individual variables are named like "Estimate!!Total:!!75 years and over:!!3.00 to 3.99"
+-   Where 3.00 to 3.99 represents the ratio of income to poverty level.
+
+## Using api.census.gov for secondary reference
+
+-   Specifics about all of the tables/groups and variables available from the census API can be explored in browser as well.
+-   Start <https://api.census.gov/data.html> and use find on page to direct a manual search.
+
+## Access the data you found using tidycensus
+
+Lets get some data!
+
+```{r, echo = TRUE, results='hide'}
+maineACS <- get_acs(
+  geography = "tract", #Census tract level geography
+  variables = "B25105_001",#median household income
+  table = NULL, #use for group variables
+  year = 2019,
+  state = "ME", #Maine
+  county = NULL, #All Counties 
+  geometry = TRUE, #FOR MAPPING
+  key = Sys.getenv("CENSUS_KEY"), #CENSUS_AP
+  survey = "acs5",
+)
+```
+
+## How to tidy and prepare the census data for mapping
+
+The census data can still come with the need for data cleaning and wrangling. In this case, we just need to omit rows with NAs. This is usually old data deprecated by adjustments in geography or municipalities.
+
+```{r, echo=TRUE}
+maine <- maineACS %>% filter(!is.na(estimate)) %>%
+  select(-moe) #omitting the moe column in this example
+```
+
+## Mapping with tmap,  projections and simplification
+
+```{r map1,  echo=TRUE, results='hide'}
+#simple map
+map1 <- tm_shape(maine) +
+  tm_polygons("estimate") +
+  tm_layout(legend.width = 0.5)
+
+#different projections
+map2 <- tm_shape(maine, projection = 3857) +
+  tm_polygons("estimate") +
+  tm_layout(legend.width = 0.5)
+
+
+map3 <- tm_shape(maine, projection = "+proj=robin") +
+  tm_polygons("estimate") +
+  tm_layout(legend.width = 0.5)
+
+##aside## make your shape files lower resolution
+simpleMaine <- simplify_shape(maine, fact = 0.5)
+
+firstMap <- tmap_arrange(map1,map2,map3, nrow = 1)
+```
+
+## Maps!
+
+```{r map2, echo = FALSE, results = 'hide',fig.keep='all'}
+firstMap
+```
+
+
+## polygons/shapes/symbols/borders
+
+```{r, echo = TRUE}
+m1 <- tm_shape(maine) +
+  tm_polygons("estimate")
+
+m2 <- tm_shape(maine) +
+  tm_bubbles("estimate")
+```
+
+## polygons/shapes/symbols/borders 2
+
+```{r mapOptions, eval = TRUE}
+tmap_arrange(m1,m2, nrow = 1)
+```
+
+## palette_explorer Shiny App
+
+tmap has an included Shiny app for exploring the available color and palette options. `tmaptools::palette_explorer()`
+
+
+## palette_explorer Shiny App 2
+```{r colorMap, echo = TRUE}
+tm_shape(maine) +
+  tm_polygons("estimate", palette = "viridis", n = 5)
+```
+## style and breaks
+
+```{r styleMap, echo = TRUE}
+m4 <- tm_shape(maine) +
+  tm_polygons("estimate", 
+              palette = "viridis",
+              style = "pretty")
+
+m5 <- tm_shape(maine) +
+  tm_polygons("estimate", palette = "viridis", n = 20)
+
+```
+
+## style and breaks 2
+
+```{r, eval = TRUE}
+tmap_arrange(m4,m5, nrow = 1)
+```
+
+## legends, compass, and scale bar
+
+Like ggplot, tmap uses layers so you can edit and add on to existing maps with (+) syntax
+
+```{r, echo = TRUE, eval = FALSE}
+
+tm_shape(maine) +
+  tm_polygons("estimate", 
+              palette = "viridis",
+              style = "pretty",
+              border.col = "white",
+              border.alpha = 1) +
+  tm_legend(legend.position = c("right", "top"),
+            legend.outside = TRUE) +
+  tm_layout(inner.margins = c(0.05,#bottom
+                                    0.1, #left
+                                    0.05, #top
+                                    0.1))+ #right
+  tm_compass()+
+  tm_scale_bar()
+
+```
+
+## legends, compass, and scale bar
+
+```{r, eval = TRUE}
+
+myMap <-  tm_shape(maine) +
+  tm_polygons("estimate", 
+              palette = "viridis",
+              style = "pretty",
+              border.col = "white",
+              border.alpha = 1) +
+  tm_legend(legend.position = c("right", "top"),
+            legend.outside = TRUE) +
+  tm_layout(inner.margins = c(0.05,#bottom
+                                    0.1, #left
+                                    0.05, #top
+                                    0.1))+ #right
+  tm_compass()+
+  tm_scale_bar()
+
+myMap
+```
+
+## layering with tmap
+
+```{r, echo = TRUE, results = 'hide'}
+maineCounties <- get_acs(geography = "county",
+                         variable = "B25105_001",
+                         state = "ME",
+                         geometry = TRUE,
+                         key = Sys.getenv("CENSUS_KEY"))
+
+
+myMap <- myMap + tm_shape(maineCounties) + 
+  tm_borders(col = "black",
+             lwd = 2)
+
+```
+
+## layering with tmap 2
+
+```{r eval = TRUE}
+myMap2 <- myMap + tm_shape(maineCounties) + 
+  tm_borders(col = "black",
+             lwd = 2)
+myMap2
+```
+
+## Make your own map of Alaska
+
+```{r}
+
+```
+
+## Sources for this summary and more exploration
+- https://walker-data.com/census-r/mapping-census-data-with-r.html#map-making-with-tmap
+- http://zevross.com/blog/2018/10/02/creating-beautiful-demographic-maps-in-r-with-the-tidycensus-and-tmap-packages/#process-census-data
+- https://r-graph-gallery.com/hexbin-map.html

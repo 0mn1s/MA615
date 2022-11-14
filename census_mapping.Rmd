@@ -37,7 +37,7 @@ get_acs(
   geometry = FALSE,# to include shape files
   shift_geo = FALSE, # For Alaska and Hawaii
   summary_var = NULL, # Variable for comparisons
-  key = NULL, # YOUR CENSUS KEY
+  key = '7d5f04e5d602e5449723b78374372ef9022508a6', # YOUR CENSUS KEY
   moe_level = 90, # Margin of Error
   survey = "acs5", # acs1, acs3, or acs5
   show_call = FALSE, # For debug
@@ -263,8 +263,175 @@ myMap2
 ## Make your own map of Alaska
 
 ```{r}
+ALACS <- get_acs(
+  geography = "tract", #Census tract level geography
+  variables = "B25105_001",#median household income
+  table = NULL, #use for group variables
+  year = 2019,
+  state = "AL", #Maine
+  county = NULL, #All Counties 
+  geometry = TRUE, #FOR MAPPING
+  key = Sys.getenv("CENSUS_KEY"), #CENSUS_AP
+  survey = "acs5",
+)
+```
+## How to tidy and prepare the census data for mapping
+
+The census data can still come with the need for data cleaning and wrangling. In this case, we just need to omit rows with NAs. This is usually old data deprecated by adjustments in geography or municipalities.
+
+```{r, echo=TRUE}
+Alasika <- ALACS %>% filter(!is.na(estimate)) %>%
+  select(-moe) #omitting the moe column in this example
+```
+
+## Mapping with tmap,  projections and simplification
+
+```{r map1,  echo=TRUE, results='hide'}
+#simple map
+map1_al <- tm_shape(Alasika) +
+  tm_polygons("estimate") +
+  tm_layout(legend.width = 0.5)
+
+#different projections
+map2_al <- tm_shape(Alasika, projection = 3857) +
+  tm_polygons("estimate") +
+  tm_layout(legend.width = 0.5)
+
+
+map3_al <- tm_shape(Alasika, projection = "+proj=robin") +
+  tm_polygons("estimate") +
+  tm_layout(legend.width = 0.5)
+
+##aside## make your shape files lower resolution
+simpleAlasika <- simplify_shape(Alasika, fact = 0.5)
+
+SecondMap <- tmap_arrange(map1_al,map2_al,map3_al, nrow = 1)
+```
+
+## Maps!
+
+```{r map2, echo = FALSE, results = 'hide',fig.keep='all'}
+SecondMap
+```
+
+
+## polygons/shapes/symbols/borders
+
+```{r, echo = TRUE}
+m1_al <- tm_shape(Alasika) +
+  tm_polygons("estimate")
+
+m2_al <- tm_shape(Alasika) +
+  tm_bubbles("estimate")
+```
+
+## polygons/shapes/symbols/borders 2
+
+```{r mapOptions, eval = TRUE}
+tmap_arrange(m1_al,m2_al, nrow = 1)
+```
+
+## palette_explorer Shiny App
+
+tmap has an included Shiny app for exploring the available color and palette options. `tmaptools::palette_explorer()`
+
+
+## palette_explorer Shiny App 2
+```{r colorMap, echo = TRUE}
+tm_shape(Alasika) +
+  tm_polygons("estimate", palette = "viridis", n = 5)
+```
+## style and breaks
+
+```{r styleMap, echo = TRUE}
+m4_al <- tm_shape(Alasika) +
+  tm_polygons("estimate", 
+              palette = "viridis",
+              style = "pretty")
+
+m5_al <- tm_shape(Alasika) +
+  tm_polygons("estimate", palette = "viridis", n = 20)
 
 ```
+
+## style and breaks 2
+
+```{r, eval = TRUE}
+tmap_arrange(m4_al,m5_al, nrow = 1)
+```
+
+## legends, compass, and scale bar
+
+Like ggplot, tmap uses layers so you can edit and add on to existing maps with (+) syntax
+
+```{r, echo = TRUE, eval = FALSE}
+
+tm_shape(Alasika) +
+  tm_polygons("estimate", 
+              palette = "viridis",
+              style = "pretty",
+              border.col = "white",
+              border.alpha = 1) +
+  tm_legend(legend.position = c("right", "top"),
+            legend.outside = TRUE) +
+  tm_layout(inner.margins = c(0.05,#bottom
+                                    0.1, #left
+                                    0.05, #top
+                                    0.1))+ #right
+  tm_compass()+
+  tm_scale_bar()
+
+```
+
+## legends, compass, and scale bar
+
+```{r, eval = TRUE}
+
+myMap_al <-  tm_shape(Alasika) +
+  tm_polygons("estimate", 
+              palette = "viridis",
+              style = "pretty",
+              border.col = "white",
+              border.alpha = 1) +
+  tm_legend(legend.position = c("right", "top"),
+            legend.outside = TRUE) +
+  tm_layout(inner.margins = c(0.05,#bottom
+                                    0.1, #left
+                                    0.05, #top
+                                    0.1))+ #right
+  tm_compass()+
+  tm_scale_bar()
+
+myMap_al
+```
+
+## layering with tmap
+
+```{r, echo = TRUE, results = 'hide'}
+alasikaCounties <- get_acs(geography = "county",
+                         variable = "B25105_001",
+                         state = "AL",
+                         geometry = TRUE,
+                         key = Sys.getenv("CENSUS_KEY"))
+
+
+myMap_al <- myMap_al + tm_shape(alasikaCounties) + 
+  tm_borders(col = "black",
+             lwd = 2)
+
+```
+
+## layering with tmap 2
+
+```{r eval = TRUE}
+myMap2_al <- myMap_al + tm_shape(alasikaCounties) + 
+  tm_borders(col = "black",
+             lwd = 2)
+myMap2_al
+```
+
+
+
 
 ## Sources for this summary and more exploration
 - https://walker-data.com/census-r/mapping-census-data-with-r.html#map-making-with-tmap
